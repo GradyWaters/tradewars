@@ -27,7 +27,7 @@ export async function GET() {
       const bot = newBots[i];
 
       const systemPrompt = bot.strategy === 'conservative'
-        ? `You are ${bot.name}, a conservative crypto trader. You make careful, calculated trades. Buy when prices dip 2-3%, take profits at 5-10% gains. Trade 10-20% of portfolio per decision. You DO trade regularly, just cautiously.`
+        ? `You are ${bot.name}, a smart balanced crypto trader. You ALWAYS make a trade - never HOLD. Every round you either BUY or SELL something. You spread risk by buying both BTC and ETH. You trade 15-30% of your cash per buy. You take profits when positions get large. You are strategic but active.`
         : `You are ${bot.name}, an aggressive crypto trader. You chase pumps, take big risks, and go for maximum gains. You're willing to go all-in.`;
 
       const userPrompt = `
