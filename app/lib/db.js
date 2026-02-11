@@ -15,6 +15,7 @@ const BOTS_KEY = 'tradewars:bots';
 const TRADES_KEY = 'tradewars:trades';
 const LAST_RESET_KEY = 'tradewars:last_reset';
 const WINNERS_KEY = 'tradewars:winners';
+const PRICE_HISTORY_KEY = 'tradewars:price_history';
 
 const defaultBots = [
   { name: 'Aurelian', balance: 10000, btc: 0, eth: 0, strategy: 'conservative' },
@@ -70,6 +71,36 @@ export async function getTrades() {
   }
 }
 
+export async function savePriceSnapshot(prices) {
+  try {
+    const db = await getClient();
+    const data = await db.get(PRICE_HISTORY_KEY);
+    const history = data ? JSON.parse(data) : [];
+    history.push({
+      btc: prices.btc,
+      eth: prices.eth,
+      time: Date.now()
+    });
+    const last60 = history.slice(-60);
+    await db.set(PRICE_HISTORY_KEY, JSON.stringify(last60));
+    return true;
+  } catch (error) {
+    console.error('Error saving price snapshot:', error);
+    return false;
+  }
+}
+
+export async function getPriceHistory() {
+  try {
+    const db = await getClient();
+    const data = await db.get(PRICE_HISTORY_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error('Error getting price history:', error);
+    return [];
+  }
+}
+
 export async function checkDailyReset() {
   try {
     const db = await getClient();
@@ -96,6 +127,7 @@ export async function checkDailyReset() {
       }
       await db.set(BOTS_KEY, JSON.stringify(defaultBots));
       await db.set(TRADES_KEY, JSON.stringify([]));
+      await db.set(PRICE_HISTORY_KEY, JSON.stringify([]));
       await db.set(LAST_RESET_KEY, today);
     }
   } catch (error) {
