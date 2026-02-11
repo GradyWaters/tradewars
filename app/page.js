@@ -3,25 +3,48 @@ import { useState, useEffect } from 'react';
 
 export default function TradeWars() {
   const [prices, setPrices] = useState({});
-  const [bots, setBots] = useState([
-    { name: 'Aurelian', balance: 10000, btc: 0, eth: 0, strategy: 'conservative' },
-    { name: 'Pumara', balance: 10000, btc: 0, eth: 0, strategy: 'aggressive' }
-  ]);
+  const [bots, setBots] = useState([]);
   const [trades, setTrades] = useState([]);
   const [isTrading, setIsTrading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    loadBots();
     fetchPrices();
     const priceInterval = setInterval(fetchPrices, 30000);
     return () => clearInterval(priceInterval);
   }, []);
 
   useEffect(() => {
-    if (Object.keys(prices).length > 0 && !isTrading) {
+    if (bots.length > 0 && Object.keys(prices).length > 0 && !isTrading) {
       const tradeInterval = setInterval(() => executeTradingRound(), 10000);
       return () => clearInterval(tradeInterval);
     }
-  }, [prices, isTrading]);
+  }, [bots, prices, isTrading]);
+
+  const loadBots = async () => {
+    try {
+      const response = await fetch('/api/bots');
+      const data = await response.json();
+      setBots(data.bots);
+      setLoading(false);
+    } catch (error) {
+      console.error('Failed to load bots:', error);
+      setLoading(false);
+    }
+  };
+
+  const saveBots = async (newBots) => {
+    try {
+      await fetch('/api/bots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bots: newBots })
+      });
+    } catch (error) {
+      console.error('Failed to save bots:', error);
+    }
+  };
 
   const fetchPrices = async () => {
     try {
@@ -39,8 +62,10 @@ export default function TradeWars() {
   const executeTradingRound = async () => {
     setIsTrading(true);
     
-    for (let i = 0; i < bots.length; i++) {
-      const bot = bots[i];
+    const newBots = [...bots];
+    
+    for (let i = 0; i < newBots.length; i++) {
+      const bot = newBots[i];
       
       try {
         const response = await fetch('/api/trade', {
@@ -55,61 +80,56 @@ export default function TradeWars() {
         });
         
         const { decision } = await response.json();
-        executeDecision(i, decision);
+        executeDecision(newBots, i, decision);
         
       } catch (error) {
         console.error(`${bot.name} trade error:`, error);
       }
     }
     
+    setBots(newBots);
+    await saveBots(newBots);
     setIsTrading(false);
   };
 
-  const executeDecision = (botIndex, decision) => {
+  const executeDecision = (botsArray, botIndex, decision) => {
     const parts = decision.split(' ');
     const action = parts[0];
     
     if (action === 'HOLD') {
-      addTrade(bots[botIndex].name, decision);
+      addTrade(botsArray[botIndex].name, decision);
       return;
     }
     
     const coin = parts[1];
     const amount = parseFloat(parts[2]);
+    const bot = botsArray[botIndex];
     
-    setBots(prev => {
-      const newBots = [...prev];
-      const bot = { ...newBots[botIndex] };
-      
-      if (action === 'BUY') {
-        if (coin === 'BTC' && bot.balance >= amount) {
-          const btcAmount = amount / prices.btc;
-          bot.balance -= amount;
-          bot.btc += btcAmount;
-          addTrade(bot.name, `BUY ${btcAmount.toFixed(4)} BTC for $${amount}`);
-        } else if (coin === 'ETH' && bot.balance >= amount) {
-          const ethAmount = amount / prices.eth;
-          bot.balance -= amount;
-          bot.eth += ethAmount;
-          addTrade(bot.name, `BUY ${ethAmount.toFixed(4)} ETH for $${amount}`);
-        }
-      } else if (action === 'SELL') {
-        if (coin === 'BTC' && bot.btc >= amount) {
-          const usdAmount = amount * prices.btc;
-          bot.btc -= amount;
-          bot.balance += usdAmount;
-          addTrade(bot.name, `SELL ${amount} BTC for $${usdAmount.toFixed(2)}`);
-        } else if (coin === 'ETH' && bot.eth >= amount) {
-          const usdAmount = amount * prices.eth;
-          bot.eth -= amount;
-          bot.balance += usdAmount;
-          addTrade(bot.name, `SELL ${amount} ETH for $${usdAmount.toFixed(2)}`);
-        }
+    if (action === 'BUY') {
+      if (coin === 'BTC' && bot.balance >= amount) {
+        const btcAmount = amount / prices.btc;
+        bot.balance -= amount;
+        bot.btc += btcAmount;
+        addTrade(bot.name, `BUY ${btcAmount.toFixed(4)} BTC for $${amount}`);
+      } else if (coin === 'ETH' && bot.balance >= amount) {
+        const ethAmount = amount / prices.eth;
+        bot.balance -= amount;
+        bot.eth += ethAmount;
+        addTrade(bot.name, `BUY ${ethAmount.toFixed(4)} ETH for $${amount}`);
       }
-      
-      newBots[botIndex] = bot;
-      return newBots;
-    });
+    } else if (action === 'SELL') {
+      if (coin === 'BTC' && bot.btc >= amount) {
+        const usdAmount = amount * prices.btc;
+        bot.btc -= amount;
+        bot.balance += usdAmount;
+        addTrade(bot.name, `SELL ${amount} BTC for $${usdAmount.toFixed(2)}`);
+      } else if (coin === 'ETH' && bot.eth >= amount) {
+        const usdAmount = amount * prices.eth;
+        bot.eth -= amount;
+        bot.balance += usdAmount;
+        addTrade(bot.name, `SELL ${amount} ETH for $${usdAmount.toFixed(2)}`);
+      }
+    }
   };
 
   const addTrade = (botName, action) => {
@@ -122,6 +142,14 @@ export default function TradeWars() {
   };
 
   const sortedBots = [...bots].sort((a, b) => calculatePortfolioValue(b) - calculatePortfolioValue(a));
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-2xl">Loading TradeWars...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
