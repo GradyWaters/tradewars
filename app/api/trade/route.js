@@ -5,26 +5,31 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+async function getPrices() {
+  const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd', {
+    headers: {
+      'Accept': 'application/json',
+      'User-Agent': 'TradeWars/1.0'
+    }
+  });
+  if (!response.ok) throw new Error('Price fetch failed');
+  const data = await response.json();
+  return { btc: data.bitcoin.usd, eth: data.ethereum.usd };
+}
+
 export async function GET() {
   try {
     const bots = await getBots();
-    
-    const pricesResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd');
-    const pricesData = await pricesResponse.json();
-    const prices = {
-      btc: pricesData.bitcoin.usd,
-      eth: pricesData.ethereum.usd
-    };
-
+    const prices = await getPrices();
     const newBots = [...bots];
-    
+
     for (let i = 0; i < newBots.length; i++) {
       const bot = newBots[i];
-      
-      const systemPrompt = bot.strategy === 'conservative' 
+
+      const systemPrompt = bot.strategy === 'conservative'
         ? `You are ${bot.name}, a conservative crypto trader. You make careful, calculated trades. Buy when prices dip 2-3%, take profits at 5-10% gains. Trade 10-20% of portfolio per decision. You DO trade regularly, just cautiously.`
         : `You are ${bot.name}, an aggressive crypto trader. You chase pumps, take big risks, and go for maximum gains. You're willing to go all-in.`;
-      
+
       const userPrompt = `
 Current Portfolio:
 - Cash: $${bot.balance.toFixed(2)}
@@ -60,14 +65,13 @@ Keep trades within your available balance/holdings.
 
         const decision = completion.choices[0].message.content.trim();
         await executeDecision(newBots, i, decision, prices);
-        
+
       } catch (error) {
         console.error(`${bot.name} trade error:`, error);
       }
     }
-    
+
     await saveBots(newBots);
-    
     return Response.json({ success: true, bots: newBots });
   } catch (error) {
     console.error('Error executing trades:', error);
@@ -79,15 +83,15 @@ async function executeDecision(botsArray, botIndex, decision, prices) {
   const parts = decision.split(' ');
   const action = parts[0];
   const bot = botsArray[botIndex];
-  
+
   if (action === 'HOLD') {
     await addTrade(bot.name, 'HOLD');
     return;
   }
-  
+
   const coin = parts[1];
   const amount = parseFloat(parts[2]);
-  
+
   if (action === 'BUY') {
     if (coin === 'BTC' && bot.balance >= amount) {
       const btcAmount = amount / prices.btc;
