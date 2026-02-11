@@ -1,9 +1,20 @@
-import { kv } from '@vercel/kv';
+import { createClient } from 'redis';
+
+let client = null;
+
+async function getClient() {
+  if (!client) {
+    client = createClient({ url: process.env.REDIS_URL });
+    client.on('error', (err) => console.error('Redis error:', err));
+    await client.connect();
+  }
+  return client;
+}
 
 const BOTS_KEY = 'tradewars:bots';
+const TRADES_KEY = 'tradewars:trades';
 const LAST_RESET_KEY = 'tradewars:last_reset';
 const WINNERS_KEY = 'tradewars:winners';
-const TRADES_KEY = 'tradewars:trades';
 
 const defaultBots = [
   { name: 'Aurelian', balance: 10000, btc: 0, eth: 0, strategy: 'conservative' },
@@ -13,8 +24,9 @@ const defaultBots = [
 export async function getBots() {
   try {
     await checkDailyReset();
-    const bots = await kv.get(BOTS_KEY);
-    return bots || defaultBots;
+    const db = await getClient();
+    const data = await db.get(BOTS_KEY);
+    return data ? JSON.parse(data) : defaultBots;
   } catch (error) {
     console.error('Error getting bots:', error);
     return defaultBots;
@@ -23,7 +35,8 @@ export async function getBots() {
 
 export async function saveBots(bots) {
   try {
-    await kv.set(BOTS_KEY, bots);
+    const db = await getClient();
+    await db.set(BOTS_KEY, JSON.stringify(bots));
     return true;
   } catch (error) {
     console.error('Error saving bots:', error);
@@ -33,10 +46,12 @@ export async function saveBots(bots) {
 
 export async function addTrade(botName, action) {
   try {
-    const trades = await kv.get(TRADES_KEY) || [];
+    const db = await getClient();
+    const data = await db.get(TRADES_KEY);
+    const trades = data ? JSON.parse(data) : [];
     const time = new Date().toLocaleTimeString();
     trades.unshift({ botName, action, time });
-    await kv.set(TRADES_KEY, trades.slice(0, 20));
+    await db.set(TRADES_KEY, JSON.stringify(trades.slice(0, 20)));
     return true;
   } catch (error) {
     console.error('Error adding trade:', error);
@@ -46,7 +61,9 @@ export async function addTrade(botName, action) {
 
 export async function getTrades() {
   try {
-    return await kv.get(TRADES_KEY) || [];
+    const db = await getClient();
+    const data = await db.get(TRADES_KEY);
+    return data ? JSON.parse(data) : [];
   } catch (error) {
     console.error('Error getting trades:', error);
     return [];
@@ -55,33 +72,31 @@ export async function getTrades() {
 
 export async function checkDailyReset() {
   try {
-    const lastReset = await kv.get(LAST_RESET_KEY);
+    const db = await getClient();
+    const lastReset = await db.get(LAST_RESET_KEY);
     const now = new Date();
     const today = now.toDateString();
-    
     if (lastReset !== today) {
-      const currentBots = await kv.get(BOTS_KEY);
-      
-      if (currentBots) {
+      const botsData = await db.get(BOTS_KEY);
+      if (botsData) {
+        const currentBots = JSON.parse(botsData);
         const winner = currentBots.reduce((prev, current) => {
           const prevValue = prev.balance + (prev.btc * 68000) + (prev.eth * 2000);
           const currentValue = current.balance + (current.btc * 68000) + (current.eth * 2000);
           return currentValue > prevValue ? current : prev;
         });
-        
-        const winners = await kv.get(WINNERS_KEY) || [];
+        const winnersData = await db.get(WINNERS_KEY);
+        const winners = winnersData ? JSON.parse(winnersData) : [];
         winners.unshift({
           date: lastReset || 'Unknown',
           winner: winner.name,
           value: winner.balance + (winner.btc * 68000) + (winner.eth * 2000)
         });
-        
-        await kv.set(WINNERS_KEY, winners.slice(0, 30));
+        await db.set(WINNERS_KEY, JSON.stringify(winners.slice(0, 30)));
       }
-      
-      await kv.set(BOTS_KEY, defaultBots);
-      await kv.set(TRADES_KEY, []);
-      await kv.set(LAST_RESET_KEY, today);
+      await db.set(BOTS_KEY, JSON.stringify(defaultBots));
+      await db.set(TRADES_KEY, JSON.stringify([]));
+      await db.set(LAST_RESET_KEY, today);
     }
   } catch (error) {
     console.error('Error in daily reset:', error);
@@ -90,7 +105,9 @@ export async function checkDailyReset() {
 
 export async function getWinners() {
   try {
-    return await kv.get(WINNERS_KEY) || [];
+    const db = await getClient();
+    const data = await db.get(WINNERS_KEY);
+    return data ? JSON.parse(data) : [];
   } catch (error) {
     console.error('Error getting winners:', error);
     return [];
