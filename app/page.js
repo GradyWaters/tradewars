@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 export default function TradeWars() {
   const [prices, setPrices] = useState({});
   const [bots, setBots] = useState([]);
+  const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,7 +23,37 @@ export default function TradeWars() {
       const botsData = await botsRes.json();
       const pricesData = await pricesRes.json();
       
-      setBots(botsData.bots);
+      const newBots = botsData.bots;
+      
+      // Detect trades by comparing with previous state
+      if (bots.length > 0) {
+        newBots.forEach((newBot, i) => {
+          const oldBot = bots[i];
+          if (oldBot) {
+            if (newBot.btc !== oldBot.btc || newBot.eth !== oldBot.eth || newBot.balance !== oldBot.balance) {
+              const time = new Date().toLocaleTimeString();
+              
+              if (newBot.btc > oldBot.btc) {
+                const amount = newBot.btc - oldBot.btc;
+                setTrades(prev => [{botName: newBot.name, action: `BUY ${amount.toFixed(4)} BTC`, time}, ...prev].slice(0, 10));
+              } else if (newBot.btc < oldBot.btc) {
+                const amount = oldBot.btc - newBot.btc;
+                setTrades(prev => [{botName: newBot.name, action: `SELL ${amount.toFixed(4)} BTC`, time}, ...prev].slice(0, 10));
+              }
+              
+              if (newBot.eth > oldBot.eth) {
+                const amount = newBot.eth - oldBot.eth;
+                setTrades(prev => [{botName: newBot.name, action: `BUY ${amount.toFixed(4)} ETH`, time}, ...prev].slice(0, 10));
+              } else if (newBot.eth < oldBot.eth) {
+                const amount = oldBot.eth - newBot.eth;
+                setTrades(prev => [{botName: newBot.name, action: `SELL ${amount.toFixed(4)} ETH`, time}, ...prev].slice(0, 10));
+              }
+            }
+          }
+        });
+      }
+      
+      setBots(newBots);
       setPrices({
         btc: pricesData.bitcoin.usd,
         eth: pricesData.ethereum.usd
@@ -72,20 +103,18 @@ export default function TradeWars() {
           </div>
 
           <div className="bg-gray-800 rounded-lg p-6">
-            <h2 className="text-xl font-bold mb-4">Competition Status</h2>
-            <div className="space-y-2">
-              <div className="bg-gray-700 p-3 rounded">
-                <div className="text-sm text-gray-400">Trading Mode</div>
-                <div className="text-lg font-bold text-green-400">Live</div>
-              </div>
-              <div className="bg-gray-700 p-3 rounded">
-                <div className="text-sm text-gray-400">Bots Active</div>
-                <div className="text-lg font-bold">{bots.length}</div>
-              </div>
-              <div className="bg-gray-700 p-3 rounded">
-                <div className="text-sm text-gray-400">Updates Every</div>
-                <div className="text-lg font-bold">10 seconds</div>
-              </div>
+            <h2 className="text-xl font-bold mb-4">Recent Trades</h2>
+            <div className="space-y-2 text-sm max-h-40 overflow-y-auto">
+              {trades.map((trade, i) => (
+                <div key={i} className="bg-gray-700 p-2 rounded">
+                  <span className="text-orange-400 font-bold">{trade.botName}:</span>{' '}
+                  <span className="text-gray-300">{trade.action}</span>{' '}
+                  <span className="text-gray-500 text-xs">({trade.time})</span>
+                </div>
+              ))}
+              {trades.length === 0 && (
+                <div className="text-gray-500 text-center py-4">Waiting for trades...</div>
+              )}
             </div>
           </div>
         </div>
@@ -118,7 +147,7 @@ export default function TradeWars() {
         </div>
 
         <div className="text-center mt-8 text-gray-500 text-sm">
-          Server-side trading • Competition resets daily at midnight UTC
+          Bots trade every minute • Competition resets daily at midnight UTC
         </div>
       </div>
     </div>
