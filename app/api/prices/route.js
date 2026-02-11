@@ -7,19 +7,12 @@ export async function GET() {
       },
       next: { revalidate: 30 }
     });
-
     if (!response.ok) {
       throw new Error('CoinGecko returned ' + response.status);
     }
-
     const data = await response.json();
-    return Response.json({
-      btc: data.bitcoin.usd,
-      eth: data.ethereum.usd
-    });
+    return Response.json({ btc: data.bitcoin.usd, eth: data.ethereum.usd });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
-```
-
