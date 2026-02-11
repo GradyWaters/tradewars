@@ -9,32 +9,46 @@ export default function TradeWars() {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 5000);
-    return () => clearInterval(interval);
+    executeTrades();
+    const dataInterval = setInterval(loadData, 5000);
+    const tradeInterval = setInterval(executeTrades, 60000);
+    return () => {
+      clearInterval(dataInterval);
+      clearInterval(tradeInterval);
+    };
   }, []);
 
   const loadData = async () => {
     try {
       const [botsRes, pricesRes, tradesRes] = await Promise.all([
         fetch('/api/bots'),
-        fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd'),
+        fetch('/api/prices'),
         fetch('/api/trades')
       ]);
-      
+
       const botsData = await botsRes.json();
       const pricesData = await pricesRes.json();
       const tradesData = await tradesRes.json();
-      
-      setBots(botsData.bots);
+
+      setBots(botsData.bots || []);
       setPrices({
-        btc: pricesData.bitcoin.usd,
-        eth: pricesData.ethereum.usd
+        btc: pricesData.btc,
+        eth: pricesData.eth
       });
       setTrades(tradesData.trades || []);
       setLoading(false);
     } catch (error) {
       console.error('Failed to load data:', error);
       setLoading(false);
+    }
+  };
+
+  const executeTrades = async () => {
+    try {
+      await fetch('/api/trade');
+      await loadData();
+    } catch (error) {
+      console.error('Trade execution error:', error);
     }
   };
 
@@ -120,7 +134,7 @@ export default function TradeWars() {
         </div>
 
         <div className="text-center mt-8 text-gray-500 text-sm">
-          Bots trade every minute • Competition resets daily at midnight UTC
+          Bots trade every minute &bull; Competition resets daily at midnight UTC
         </div>
       </div>
     </div>
