@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { getBots, saveBots } from '@/app/lib/db';
+import { getBots, saveBots, addTrade } from '@/app/lib/db';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -59,7 +59,7 @@ Keep trades within your available balance/holdings.
         });
 
         const decision = completion.choices[0].message.content.trim();
-        executeDecision(newBots, i, decision, prices);
+        await executeDecision(newBots, i, decision, prices);
         
       } catch (error) {
         console.error(`${bot.name} trade error:`, error);
@@ -75,35 +75,42 @@ Keep trades within your available balance/holdings.
   }
 }
 
-function executeDecision(botsArray, botIndex, decision, prices) {
+async function executeDecision(botsArray, botIndex, decision, prices) {
   const parts = decision.split(' ');
   const action = parts[0];
+  const bot = botsArray[botIndex];
   
-  if (action === 'HOLD') return;
+  if (action === 'HOLD') {
+    await addTrade(bot.name, 'HOLD');
+    return;
+  }
   
   const coin = parts[1];
   const amount = parseFloat(parts[2]);
-  const bot = botsArray[botIndex];
   
   if (action === 'BUY') {
     if (coin === 'BTC' && bot.balance >= amount) {
       const btcAmount = amount / prices.btc;
       bot.balance -= amount;
       bot.btc += btcAmount;
+      await addTrade(bot.name, `BUY ${btcAmount.toFixed(4)} BTC for $${amount.toFixed(2)}`);
     } else if (coin === 'ETH' && bot.balance >= amount) {
       const ethAmount = amount / prices.eth;
       bot.balance -= amount;
       bot.eth += ethAmount;
+      await addTrade(bot.name, `BUY ${ethAmount.toFixed(4)} ETH for $${amount.toFixed(2)}`);
     }
   } else if (action === 'SELL') {
     if (coin === 'BTC' && bot.btc >= amount) {
       const usdAmount = amount * prices.btc;
       bot.btc -= amount;
       bot.balance += usdAmount;
+      await addTrade(bot.name, `SELL ${amount.toFixed(4)} BTC for $${usdAmount.toFixed(2)}`);
     } else if (coin === 'ETH' && bot.eth >= amount) {
       const usdAmount = amount * prices.eth;
       bot.eth -= amount;
       bot.balance += usdAmount;
+      await addTrade(bot.name, `SELL ${amount.toFixed(4)} ETH for $${usdAmount.toFixed(2)}`);
     }
   }
 }

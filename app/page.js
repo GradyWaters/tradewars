@@ -15,49 +15,22 @@ export default function TradeWars() {
 
   const loadData = async () => {
     try {
-      const [botsRes, pricesRes] = await Promise.all([
+      const [botsRes, pricesRes, tradesRes] = await Promise.all([
         fetch('/api/bots'),
-        fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd')
+        fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd'),
+        fetch('/api/trades')
       ]);
       
       const botsData = await botsRes.json();
       const pricesData = await pricesRes.json();
+      const tradesData = await tradesRes.json();
       
-      const newBots = botsData.bots;
-      
-      // Detect trades by comparing with previous state
-      if (bots.length > 0) {
-        newBots.forEach((newBot, i) => {
-          const oldBot = bots[i];
-          if (oldBot) {
-            if (newBot.btc !== oldBot.btc || newBot.eth !== oldBot.eth || newBot.balance !== oldBot.balance) {
-              const time = new Date().toLocaleTimeString();
-              
-              if (newBot.btc > oldBot.btc) {
-                const amount = newBot.btc - oldBot.btc;
-                setTrades(prev => [{botName: newBot.name, action: `BUY ${amount.toFixed(4)} BTC`, time}, ...prev].slice(0, 10));
-              } else if (newBot.btc < oldBot.btc) {
-                const amount = oldBot.btc - newBot.btc;
-                setTrades(prev => [{botName: newBot.name, action: `SELL ${amount.toFixed(4)} BTC`, time}, ...prev].slice(0, 10));
-              }
-              
-              if (newBot.eth > oldBot.eth) {
-                const amount = newBot.eth - oldBot.eth;
-                setTrades(prev => [{botName: newBot.name, action: `BUY ${amount.toFixed(4)} ETH`, time}, ...prev].slice(0, 10));
-              } else if (newBot.eth < oldBot.eth) {
-                const amount = oldBot.eth - newBot.eth;
-                setTrades(prev => [{botName: newBot.name, action: `SELL ${amount.toFixed(4)} ETH`, time}, ...prev].slice(0, 10));
-              }
-            }
-          }
-        });
-      }
-      
-      setBots(newBots);
+      setBots(botsData.bots);
       setPrices({
         btc: pricesData.bitcoin.usd,
         eth: pricesData.ethereum.usd
       });
+      setTrades(tradesData.trades || []);
       setLoading(false);
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -113,7 +86,7 @@ export default function TradeWars() {
                 </div>
               ))}
               {trades.length === 0 && (
-                <div className="text-gray-500 text-center py-4">Waiting for trades...</div>
+                <div className="text-gray-500 text-center py-4">Waiting for first trade...</div>
               )}
             </div>
           </div>

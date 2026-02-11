@@ -3,6 +3,7 @@ import { kv } from '@vercel/kv';
 const BOTS_KEY = 'tradewars:bots';
 const LAST_RESET_KEY = 'tradewars:last_reset';
 const WINNERS_KEY = 'tradewars:winners';
+const TRADES_KEY = 'tradewars:trades';
 
 const defaultBots = [
   { name: 'Aurelian', balance: 10000, btc: 0, eth: 0, strategy: 'conservative' },
@@ -27,6 +28,28 @@ export async function saveBots(bots) {
   } catch (error) {
     console.error('Error saving bots:', error);
     return false;
+  }
+}
+
+export async function addTrade(botName, action) {
+  try {
+    const trades = await kv.get(TRADES_KEY) || [];
+    const time = new Date().toLocaleTimeString();
+    trades.unshift({ botName, action, time });
+    await kv.set(TRADES_KEY, trades.slice(0, 20));
+    return true;
+  } catch (error) {
+    console.error('Error adding trade:', error);
+    return false;
+  }
+}
+
+export async function getTrades() {
+  try {
+    return await kv.get(TRADES_KEY) || [];
+  } catch (error) {
+    console.error('Error getting trades:', error);
+    return [];
   }
 }
 
@@ -57,6 +80,7 @@ export async function checkDailyReset() {
       }
       
       await kv.set(BOTS_KEY, defaultBots);
+      await kv.set(TRADES_KEY, []);
       await kv.set(LAST_RESET_KEY, today);
     }
   } catch (error) {
