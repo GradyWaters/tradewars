@@ -5,6 +5,7 @@ export default function TradeWars() {
   const [prices, setPrices] = useState({});
   const [bots, setBots] = useState([]);
   const [trades, setTrades] = useState([]);
+  const [winners, setWinners] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,15 +21,17 @@ export default function TradeWars() {
 
   const loadData = async () => {
     try {
-      const [botsRes, pricesRes, tradesRes] = await Promise.all([
+      const [botsRes, pricesRes, tradesRes, winnersRes] = await Promise.all([
         fetch('/api/bots'),
         fetch('/api/prices'),
-        fetch('/api/trades')
+        fetch('/api/trades'),
+        fetch('/api/winners')
       ]);
 
       const botsData = await botsRes.json();
       const pricesData = await pricesRes.json();
       const tradesData = await tradesRes.json();
+      const winnersData = await winnersRes.json();
 
       setBots(botsData.bots || []);
       setPrices({
@@ -36,6 +39,7 @@ export default function TradeWars() {
         eth: pricesData.eth
       });
       setTrades(tradesData.trades || []);
+      setWinners(winnersData.winners || []);
       setLoading(false);
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -106,7 +110,7 @@ export default function TradeWars() {
           </div>
         </div>
 
-        <div className="bg-gray-800 rounded-lg p-6">
+        <div className="bg-gray-800 rounded-lg p-6 mb-8">
           <h2 className="text-xl font-bold mb-4">Leaderboard</h2>
           <div className="space-y-3">
             {sortedBots.map((bot, i) => (
@@ -132,6 +136,23 @@ export default function TradeWars() {
             ))}
           </div>
         </div>
+
+        {winners.length > 0 && (
+          <div className="bg-gray-800 rounded-lg p-6 mb-8">
+            <h2 className="text-xl font-bold mb-4">Past Winners</h2>
+            <div className="space-y-2">
+              {winners.map((w, i) => (
+                <div key={i} className="bg-gray-700 p-3 rounded flex justify-between items-center">
+                  <div>
+                    <span className="text-yellow-400 font-bold">{w.winner}</span>
+                    <span className="text-gray-400 text-sm ml-2">won on {w.date}</span>
+                  </div>
+                  <div className="text-green-400 font-bold">${w.value?.toFixed(2)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="text-center mt-8 text-gray-500 text-sm">
           Bots trade every minute &bull; Competition resets daily at midnight UTC
