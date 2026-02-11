@@ -4,137 +4,34 @@ import { useState, useEffect } from 'react';
 export default function TradeWars() {
   const [prices, setPrices] = useState({});
   const [bots, setBots] = useState([]);
-  const [trades, setTrades] = useState([]);
-  const [isTrading, setIsTrading] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadBots();
-    fetchPrices();
-    const priceInterval = setInterval(fetchPrices, 30000);
-    return () => clearInterval(priceInterval);
+    loadData();
+    const interval = setInterval(loadData, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (bots.length > 0 && Object.keys(prices).length > 0 && !isTrading) {
-      const tradeInterval = setInterval(() => executeTradingRound(), 10000);
-      return () => clearInterval(tradeInterval);
-    }
-  }, [bots, prices, isTrading]);
-
-  const loadBots = async () => {
+  const loadData = async () => {
     try {
-      const response = await fetch('/api/bots');
-      const data = await response.json();
-      setBots(data.bots);
-      setLoading(false);
-    } catch (error) {
-      console.error('Failed to load bots:', error);
-      setLoading(false);
-    }
-  };
-
-  const saveBots = async (newBots) => {
-    try {
-      await fetch('/api/bots', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bots: newBots })
-      });
-    } catch (error) {
-      console.error('Failed to save bots:', error);
-    }
-  };
-
-  const fetchPrices = async () => {
-    try {
-      const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd');
-      const data = await response.json();
-      setPrices({
-        btc: data.bitcoin.usd,
-        eth: data.ethereum.usd
-      });
-    } catch (error) {
-      console.error('Failed to fetch prices:', error);
-    }
-  };
-
-  const executeTradingRound = async () => {
-    setIsTrading(true);
-    
-    const newBots = [...bots];
-    
-    for (let i = 0; i < newBots.length; i++) {
-      const bot = newBots[i];
+      const [botsRes, pricesRes] = await Promise.all([
+        fetch('/api/bots'),
+        fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd')
+      ]);
       
-      try {
-        const response = await fetch('/api/trade', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            botName: bot.name,
-            strategy: bot.strategy,
-            portfolio: { balance: bot.balance, btc: bot.btc, eth: bot.eth },
-            prices: prices
-          })
-        });
-        
-        const { decision } = await response.json();
-        executeDecision(newBots, i, decision);
-        
-      } catch (error) {
-        console.error(`${bot.name} trade error:`, error);
-      }
+      const botsData = await botsRes.json();
+      const pricesData = await pricesRes.json();
+      
+      setBots(botsData.bots);
+      setPrices({
+        btc: pricesData.bitcoin.usd,
+        eth: pricesData.ethereum.usd
+      });
+      setLoading(false);
+    } catch (error) {
+      console.error('Failed to load data:', error);
+      setLoading(false);
     }
-    
-    setBots(newBots);
-    await saveBots(newBots);
-    setIsTrading(false);
-  };
-
-  const executeDecision = (botsArray, botIndex, decision) => {
-    const parts = decision.split(' ');
-    const action = parts[0];
-    
-    if (action === 'HOLD') {
-      addTrade(botsArray[botIndex].name, decision);
-      return;
-    }
-    
-    const coin = parts[1];
-    const amount = parseFloat(parts[2]);
-    const bot = botsArray[botIndex];
-    
-    if (action === 'BUY') {
-      if (coin === 'BTC' && bot.balance >= amount) {
-        const btcAmount = amount / prices.btc;
-        bot.balance -= amount;
-        bot.btc += btcAmount;
-        addTrade(bot.name, `BUY ${btcAmount.toFixed(4)} BTC for $${amount}`);
-      } else if (coin === 'ETH' && bot.balance >= amount) {
-        const ethAmount = amount / prices.eth;
-        bot.balance -= amount;
-        bot.eth += ethAmount;
-        addTrade(bot.name, `BUY ${ethAmount.toFixed(4)} ETH for $${amount}`);
-      }
-    } else if (action === 'SELL') {
-      if (coin === 'BTC' && bot.btc >= amount) {
-        const usdAmount = amount * prices.btc;
-        bot.btc -= amount;
-        bot.balance += usdAmount;
-        addTrade(bot.name, `SELL ${amount} BTC for $${usdAmount.toFixed(2)}`);
-      } else if (coin === 'ETH' && bot.eth >= amount) {
-        const usdAmount = amount * prices.eth;
-        bot.eth -= amount;
-        bot.balance += usdAmount;
-        addTrade(bot.name, `SELL ${amount} ETH for $${usdAmount.toFixed(2)}`);
-      }
-    }
-  };
-
-  const addTrade = (botName, action) => {
-    const time = new Date().toLocaleTimeString();
-    setTrades(prev => [{ botName, action, time }, ...prev].slice(0, 10));
   };
 
   const calculatePortfolioValue = (bot) => {
@@ -175,18 +72,20 @@ export default function TradeWars() {
           </div>
 
           <div className="bg-gray-800 rounded-lg p-6">
-            <h2 className="text-xl font-bold mb-4">Recent Trades</h2>
-            <div className="space-y-2 text-sm max-h-40 overflow-y-auto">
-              {trades.map((trade, i) => (
-                <div key={i} className="bg-gray-700 p-2 rounded">
-                  <span className="text-orange-400 font-bold">{trade.botName}:</span>{' '}
-                  <span className="text-gray-300">{trade.action}</span>{' '}
-                  <span className="text-gray-500 text-xs">({trade.time})</span>
-                </div>
-              ))}
-              {trades.length === 0 && (
-                <div className="text-gray-500 text-center py-4">Waiting for first trade...</div>
-              )}
+            <h2 className="text-xl font-bold mb-4">Competition Status</h2>
+            <div className="space-y-2">
+              <div className="bg-gray-700 p-3 rounded">
+                <div className="text-sm text-gray-400">Trading Mode</div>
+                <div className="text-lg font-bold text-green-400">Live</div>
+              </div>
+              <div className="bg-gray-700 p-3 rounded">
+                <div className="text-sm text-gray-400">Bots Active</div>
+                <div className="text-lg font-bold">{bots.length}</div>
+              </div>
+              <div className="bg-gray-700 p-3 rounded">
+                <div className="text-sm text-gray-400">Updates Every</div>
+                <div className="text-lg font-bold">10 seconds</div>
+              </div>
             </div>
           </div>
         </div>
@@ -219,7 +118,7 @@ export default function TradeWars() {
         </div>
 
         <div className="text-center mt-8 text-gray-500 text-sm">
-          Bots trade every 10 seconds • Competition resets daily at midnight UTC
+          Server-side trading • Competition resets daily at midnight UTC
         </div>
       </div>
     </div>
